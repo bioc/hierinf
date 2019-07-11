@@ -219,6 +219,9 @@ test_only_hierarchy <- function(x, y, dendr, res.multisplit, clvar = NULL,
                              res.multisplit = res.multisplit,
                              family = family)
 
+  # Create skeleton of the object mod.small, i.e. fill it with NULL.
+  mod.small <- compMOD_small(res.multisplit = res.multisplit)
+
   # The variable minimal.pval is used for the hierarchical adjustment.
   # The p-value of a subcluster has to be as least as large as the p-value of
   # its parent.
@@ -244,9 +247,11 @@ test_only_hierarchy <- function(x, y, dendr, res.multisplit, clvar = NULL,
                                                  minimal.pval = minimal.pval,
                                                  agg.method = agg.method,
                                                  mod.large = mod.large,
+                                                 mod.small = mod.small,
                                                  stouffer.weights = stouffer.weights),
-                               ret.obj = list("colnames.cluster" = NULL,
-                                              "pval" = NULL))
+                               ret.obj = list("cluster" = list("colnames.cluster" = NULL,
+                                                               "pval" = NULL),
+                                              "mod.small" = mod.small))
 
     # If some warning occurred, then continue testing but report the warning
     # messages as an attribute of the return object.
@@ -270,7 +275,7 @@ test_only_hierarchy <- function(x, y, dendr, res.multisplit, clvar = NULL,
     warnings.to.return <- res.global$warning
 
     # check if the global p-value is significant
-    if (res.global$value$pval > alpha) {
+    if (res.global$value$cluster$pval > alpha) {
       # the global p-value is larger than alpha
       if (verbose) {
         message("The global null hypothesis cannot be rejected.")
@@ -287,7 +292,8 @@ test_only_hierarchy <- function(x, y, dendr, res.multisplit, clvar = NULL,
       if (verbose) {
         message("The global null hypothesis was rejected.")
       }
-      minimal.pval <- res.global$value$pval
+      minimal.pval <- res.global$value$cluster$pval
+      mod.small <- res.global$value$mod.small
     }
   }
 
@@ -336,6 +342,7 @@ test_only_hierarchy <- function(x, y, dendr, res.multisplit, clvar = NULL,
       minimal.pval
       agg.method
       mod.large
+      mod.small
       stouffer.weights
       function(colnames.cluster) {
         tryCatch_W_E(comp_cluster_pval(x = x, y = y, clvar = clvar,
@@ -345,9 +352,11 @@ test_only_hierarchy <- function(x, y, dendr, res.multisplit, clvar = NULL,
                                        minimal.pval = minimal.pval,
                                        agg.method = agg.method,
                                        mod.large = mod.large,
+                                       mod.small = mod.small,
                                        stouffer.weights = stouffer.weights),
-                     ret.obj = list("colnames.cluster" = NULL,
-                                    "pval" = NULL))
+                     ret.obj = list("cluster" = list("colnames.cluster" = NULL,
+                                                     "pval" = NULL),
+                                    "mod.small" = mod.small))
       }})
 
     res.blocks <- if (do.parallel) {
@@ -392,7 +401,7 @@ test_only_hierarchy <- function(x, y, dendr, res.multisplit, clvar = NULL,
     warnings.to.return <- c(warnings.to.return, do.call(c, res.blocks["warning", ]))
 
     # Check if any p-value of the blocks is significant.
-    if (all(do.call(c, do.call(cbind, res.blocks["value", ])["pval", ]) > alpha)) {
+    if (all(do.call(c, do.call(cbind, do.call(cbind, res.blocks["value", ])["cluster", ])["pval", ]) > alpha)) { ### TODO
       # All p-values of the blocks are larger than alpha
       if (verbose) {
         message("None of the null hypotheses for each block could be rejected.")
@@ -402,7 +411,7 @@ test_only_hierarchy <- function(x, y, dendr, res.multisplit, clvar = NULL,
         continue.testing <- FALSE
         signif.clusters <- list(list(value = list(name.block = NA,
                                                   signif.clusters =
-                                                    list(res.global$value)),
+                                                    list(res.global$value$cluster)),
                                      error = NULL,
                                      warning = NULL)) # See warnings.to.return
       } else {
@@ -441,7 +450,7 @@ test_only_hierarchy <- function(x, y, dendr, res.multisplit, clvar = NULL,
     # global null. This makes it possible to use the package for each block,
     # say, chromosome separately as it is possible with the package hierGWAS.
     if (global.test) {
-      if (length(setdiff(res.global$value$colnames.cluster, labels(dendr[[1]]))) == 0) {
+      if (length(setdiff(res.global$value$colnames.cluster, labels(dendr[[1]]))) == 0) { ### TODO
         # top level of tree = global null
         test.top.level <- FALSE
       } else {
@@ -472,9 +481,11 @@ test_only_hierarchy <- function(x, y, dendr, res.multisplit, clvar = NULL,
                                                         minimal.pval = minimal.pval,
                                                         agg.method = agg.method,
                                                         mod.large = mod.large,
+                                                        mod.small = mod.small,
                                                         stouffer.weights = stouffer.weights),
-                                      ret.obj = list("colnames.cluster" = NULL,
-                                                     "pval" = NULL)))
+                                      ret.obj = list("cluster" = list("colnames.cluster" = NULL,
+                                                                      "pval" = NULL),
+                                                     "mod.small" = mod.small)))
 
       res.blocks <- do.call(cbind, res.blocks)
 
@@ -504,7 +515,7 @@ test_only_hierarchy <- function(x, y, dendr, res.multisplit, clvar = NULL,
       # the function iterative_testing takes care of that.)
       # We could ommit the all() below because it's just one value but that
       # does not hurt.
-      if (global.test & all(do.call(c, do.call(cbind, res.blocks["value", ])["pval", ]) > alpha)) {
+      if (global.test & all(do.call(c, do.call(cbind, do.call(cbind, res.blocks["value", ])["cluster", ])["pval", ]) > alpha)) { ### TODO
         # All p-values of the blocks are larger than alpha
         if (verbose) {
           message("The null hypotheses of the top level of the tree could not be rejected.")
@@ -513,7 +524,7 @@ test_only_hierarchy <- function(x, y, dendr, res.multisplit, clvar = NULL,
         continue.testing <- FALSE
         signif.clusters <- list(list(value = list(name.block = NA,
                                                   signif.clusters =
-                                                    list(res.global$value)),
+                                                    list(res.global$value$cluster)), ### TODO
                                      error = NULL,
                                      warning = NULL)) # See warnings.to.return
       }
@@ -561,6 +572,7 @@ test_only_hierarchy <- function(x, y, dendr, res.multisplit, clvar = NULL,
       res.blocks
       agg.method
       mod.large
+      # mod.small
       stouffer.weights
       function(i) {
         tryCatch_W_E(iterative_testing(x = x, y = y, clvar = clvar,
@@ -573,6 +585,7 @@ test_only_hierarchy <- function(x, y, dendr, res.multisplit, clvar = NULL,
                                        verbose = verbose,
                                        agg.method = agg.method,
                                        mod.large = mod.large,
+                                       # mod.small = mod.small,
                                        stouffer.weights = stouffer.weights),
                      ret.obj = list(name.block = name.blocks[i],
                                     signif.clusters = list(list(colnames.cluster = NULL,

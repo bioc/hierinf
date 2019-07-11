@@ -8,46 +8,51 @@
 # @return adjusted p-value.
 comp_cluster_pval <- function(x, y, clvar, res.multisplit, colnames.cluster,
                               family, len.y, minimal.pval, agg.method, mod.large,
-                              stouffer.weights) {
+                              mod.small = NULL, stouffer.weights) {
 
   # compute a p-value for each of the phenotypes or phenotypes & corresponding
   # (distinct) genotypes and (distinct) control covariates
-  pvals_data <- mapply(comp_one_data, x = x, y = y, clvar = clvar,
+  pvals.data <- mapply(comp_one_data, x = x, y = y, clvar = clvar,
                        res.multisplit = res.multisplit, mod.large = mod.large,
+                       mod.small = mod.small,
                        MoreArgs = list(colnames.cluster = colnames.cluster,
                                        family = family))
 
+  pvals.only <- do.call(c, pvals.data["pval", ])
+
   pval <-
-    if (length(pvals_data) == 1) {
+    if (length(pvals.only) == 1) {
       # No aggregation method is applied because the user only specified one
       # data set.
-      pvals_data
+      pvals.only
 
     } else if (agg.method == "Tippett") {
       # Tippett's method: combine the p-values
-      max(1 - (1 - min(pvals_data))^(length(x)), .Machine$double.neg.eps)
+      max(1 - (1 - min(pvals.only))^(length(x)), .Machine$double.neg.eps)
       # We use max(., .Machine$double.neg.eps) because all smaller values
       # are set to zero, i.e. identical(1, 1 - 1e-17) => TRUE because of
       # rounding in floating point arithmetic.
 
       # # Alternative:
       # # Minimum p-value, Bonferroni corrected, i.e. m * min(p_i)
-      # min(c(1, length(x) * min(pvals_data)))
+      # min(c(1, length(x) * min(pvals.only)))
 
     } else if (agg.method == "Stouffer") {
       # Stouffer's method: combine the p-values
-      stats::pnorm(sum(stouffer.weights * stats::qnorm(pvals_data)))
+      stats::pnorm(sum(stouffer.weights * stats::qnorm(pvals.only)))
 
     }
-    # else if (agg.method == "max") {
-    #   # Largest p-value
-    #   max(pvals_data)^(length(x))
-    # }
+  # else if (agg.method == "max") {
+  #   # Largest p-value
+  #   max(pvals.only)^(length(x))
+  # }
 
 
   # hierarchical adjustment of the p-value (below Equation 4 on page 333 of
   # Mandozzi and Buehlmann (2016))
-  return(list(colnames.cluster = colnames.cluster, pval = max(pval, minimal.pval)))
+  return(list("cluster" = list(colnames.cluster = colnames.cluster,
+                               pval = max(pval, minimal.pval)),
+              "mod.small" = pvals.data["mod.small", ]))
 } # {comp_cluster_pval}
 
 # Compute the adjusted p-value for a given cluster and given data set
@@ -55,7 +60,7 @@ comp_cluster_pval <- function(x, y, clvar, res.multisplit, colnames.cluster,
 # Compute the adjusted p-value for a given cluster (specified by the
 # argument \code{colnames.cluster}) and given data set.
 comp_one_data <- function(x, y, clvar, res.multisplit, colnames.cluster,
-                          family, mod.large){
+                          family, mod.large, mod.small){
 
   # prepare the variables for the call of comp_cluster_pval
   B <- nrow(res.multisplit$out.sample)
@@ -64,14 +69,26 @@ comp_one_data <- function(x, y, clvar, res.multisplit, colnames.cluster,
   out.sample <- split(res.multisplit$out.sample, seq(B))
   sel.coef <- split(res.multisplit$sel.coef, seq(B))
 
+  # #####
+  # if (all(colnames.cluster == c("rsid2"))) {
+  #   print(2)
+  # }
+  # #####
+
   # compute the p-value for each split and aggregate them
   pvals.split <- mapply(FUN = comp_one_split, out.sample = out.sample,
                         sel.coef = sel.coef, mod.large = mod.large,
+                        mod.small = mod.small,
                         MoreArgs = list(x = x, y = y, clvar = clvar,
                                         colnames.cluster = colnames.cluster,
                                         family = family))
-  if ((no_NA <- sum(is.na(pvals.split))) == B) {
-    stop("The p-value of a cluster could not be calculated for all of the ", B, " splits. You might have colinear variables in one of your data sets and the algorithm might try to test a cluster containing only colinear variables. There could be more than one colinear variable in that cluster but not all of them.")
+  pvals <- do.call(c, pvals.split["pval", ])
+  mod.small <- pvals.split["mod.small", ]
+
+  if ((no_NA <- sum(is.na(pvals))) == B) {
+    print(1)
+    # stop("The p-value of a cluster could not be calculated for all of the ", B, " splits. You might have colinear variables in one of your data sets and the algorithm might try to test a cluster containing only colinear variables. There could be more than one colinear variable in that cluster but not all of them.")
+    pvals <- rep(1, B)
   }
 
   if (no_NA > 0) {
@@ -80,7 +97,7 @@ comp_one_data <- function(x, y, clvar, res.multisplit, colnames.cluster,
 
   # Aggregation of p-values over the B splits
   # Equation 4 on page 333 in Mandozzi and Buehlmann (2016)
-  return(adj_pval(pvals.split, B))
+  return(list("pval" = adj_pval(pvals, B), "mod.small" = mod.small))
 } # {comp_one_data}
 
 # Compute the adjusted p-value for a given cluster and given split of a data
@@ -89,13 +106,23 @@ comp_one_data <- function(x, y, clvar, res.multisplit, colnames.cluster,
 # Compute the adjusted p-value for a given cluster (specified by the
 # argument \code{colnames.cluster}) and given split of a data set.
 comp_one_split <- function(x, y, clvar, out.sample, sel.coef, colnames.cluster,
-                           family, mod.large) {
+                           family, mod.large, mod.small) {
   sel.coef <- sel.coef[!is.na(sel.coef)]
   common.colnames <- intersect(colnames.cluster, sel.coef)
+
+  # #####
+  # if (all(colnames.cluster == c("rsid2"))) {
+  #   print(2)
+  # }
+  # #####
 
   # maybe change this !
   pval <-
     if (length(common.colnames) == 0) {
+      # return the previous mod.small
+      pval_unadj <- list()
+      pval_unadj$mod.small <- mod.small
+
       1 # The p-value does not have to be calculated.
     } else {
       # drop = FALSE because we need a matrix although only one column might be
@@ -105,12 +132,13 @@ comp_one_split <- function(x, y, clvar, out.sample, sel.coef, colnames.cluster,
                              clvar = clvar[out.sample, ],
                              colnames.cluster = colnames.cluster,
                              family = family,
-                             mod.large = mod.large)
+                             mod.large = mod.large,
+                             mod.small = mod.small)
       # Equation 3 on page 333 in Mandozzi and Buehlmann (2016)
-      min(pval_unadj * length(sel.coef) / length(common.colnames), 1)
+      min(pval_unadj$pval * length(sel.coef) / length(common.colnames), 1)
     }
   # return adjusted p-value
-  return(pval)
+  return(list("pval" = pval, "mod.small" = pval_unadj$mod.small))
 } # {comp_one_split}
 
 # Perform LRT
@@ -118,18 +146,35 @@ comp_one_split <- function(x, y, clvar, out.sample, sel.coef, colnames.cluster,
 # Perform LRT (or F test) and return the resulting p-value.
 
 #' @importFrom stats lm anova
-test_var <- function (x, y, clvar, colnames.cluster, family, mod.large) {
+test_var <- function (x, y, clvar, colnames.cluster, family, mod.large, mod.small) {
 
   ### generate design matrices ###
   setdiff.cluster <- setdiff(colnames(x), colnames.cluster)
 
-  data.large <- cbind(clvar, x)
+  # data.large <- cbind(clvar, x)
   data.small <- cbind(clvar, x[, setdiff.cluster]) # This results in a matrix although it might only have one column :-)
   # Note that if, say, clvar is equal to NULL, then this code works fine.
   # This means cbind(NULL, x) will result in x
 
   ### compare the models ###
   if (ncol(data.small) == 0) {data.small <- rep(1, length(y))}
+
+  # Calculate mod.small if required
+  # mod.small$setdiff.cluster (of the parent cluster) contains less or the
+  # same number of variable names than setdiff.cluster of the "current" cluster.
+  # If mod.small$setdiff.cluster "==" setdiff.cluster, then we do not need to
+  # calculate mod.small.
+  if (is.null(mod.small$mod) | !all(setdiff.cluster %in% mod.small$setdiff.cluster)) {
+    mod.small <- if (family == "binomial") {
+      list("mod" = MEL(data.small, y, maxit = 100),
+           "setdiff.cluster" = setdiff.cluster)
+    } else if (family == "gaussian") {
+      list("mod" = lm(y ~ data.small, model = FALSE, qr = FALSE),
+           "setdiff.cluster" = setdiff.cluster)
+    }
+  }
+
+
   # TODO use switch if there would be more possible families!
   pval <-
     if (family == "binomial") {
@@ -140,19 +185,23 @@ test_var <- function (x, y, clvar, colnames.cluster, family, mod.large) {
       #              mod.large,
       #              test = "Chisq")$"Pr(>Chi)"[2]
 
-      own_anova.glmlist(list(MEL(data.small, y, maxit = 100),
-                             # MEL(data.large, y, maxit = 100),
-                             mod.large),
-                        test = "Chisq")$"Pr(>Chi)"[2]
+      own_anova.glmlist(list(# MEL(data.small, y, maxit = 100),
+        mod.small$mod,
+        # MEL(data.large, y, maxit = 100),
+        mod.large),
+        test = "Chisq")$"Pr(>Chi)"[2]
+
     } else if (family == "gaussian") {
       # partial F test
-      anova(lm(y ~ data.small, model = FALSE, qr = FALSE),
-            # stats::lm(y ~ data.large),
-            mod.large,
-            test = "F")$P[2]
+      anova(# lm(y ~ data.small, model = FALSE, qr = FALSE),
+        mod.small$mod,
+        # stats::lm(y ~ data.large),
+        mod.large,
+        test = "F")$P[2]
+
     }
 
-  return(pval)
+  return(list("pval" = pval, "mod.small" = mod.small))
 } # {test_var}
 
 # Adjust and aggregate the p-values (per split)
