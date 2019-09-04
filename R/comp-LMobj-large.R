@@ -24,7 +24,7 @@ compMOD_one_data <- function(x, y, clvar, res.multisplit, family){
   out.sample <- split(res.multisplit$out.sample, seq(B))
   sel.coef <- split(res.multisplit$sel.coef, seq(B))
 
-  # compute the p-value for each split and aggregate them
+  # compute the lm/glm output for the large design matrix and for each split
   MODobj_split <- mapply(FUN = compMOD_one_split, out.sample = out.sample,
                          sel.coef = sel.coef,
                          MoreArgs = list(x = x, y = y, clvar = clvar,
@@ -64,6 +64,40 @@ compMOD_one <- function (x, y, clvar, family) {
 
   return(MODout)
 } # {compMOD_one}
+
+
+
+# Create skeleton of model output for the small design matrix
+#
+# Create skeleton of model output for the small design matrix,
+# i.e. we fill it with NULL:
+#
+# @return list of NULL for the small design matrix
+compMOD_small <- function(res.multisplit) {
+
+  MODobj_data <- mapply(compMOD_one_data_S, res.multisplit = res.multisplit,
+                        SIMPLIFY = FALSE)
+
+  return(MODobj_data)
+} # {compMOD_large_S}
+
+# Compute output of lm/glm model for each data set
+compMOD_one_data_S <- function(res.multisplit){
+
+  # prepare the variables for the call of comp_cluster_pval
+  B <- nrow(res.multisplit$out.sample)
+
+  # return NULL for each split
+  MODobj_split <- mapply(FUN = compMOD_one_split_S, b = seq_len(B),
+                         SIMPLIFY = FALSE)
+
+  return(MODobj_split)
+} # {compMOD_one_data_S}
+
+# Compute output of lm/glm model for each split
+compMOD_one_split_S <- function(b) {
+  return(NULL)
+} # {compMOD_one_split_S}
 
 
 

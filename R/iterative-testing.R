@@ -7,10 +7,11 @@
 # \code{cluster.queue} keeps track of the cluster to be tested.
 iterative_testing <- function(x, y, clvar, res.multisplit, dendr, name.block,
                               res.block, family, len.y, alpha, verbose,
-                              agg.method, mod.large, stouffer.weights) {
+                              agg.method, mod.large, # mod.small,
+                              stouffer.weights) {
 
   ### check if the current cluster is significant ###
-  if (res.block$pval > alpha){
+  if (res.block$cluster$pval > alpha){
     return(list(name.block = name.block,
                 signif.clusters = list(list(colnames.cluster = NULL,
                                             pval = NULL))))
@@ -19,13 +20,14 @@ iterative_testing <- function(x, y, clvar, res.multisplit, dendr, name.block,
     # Initialize the cluster.queue
   # This is a list with one element which contains a list with elements.
   cluster.queue <- list(list(dendr = dendr,
-                             colnames.cluster = res.block$colnames.cluster,
-                             pval = res.block$pval))
+                             colnames.cluster = res.block$cluster$colnames.cluster,
+                             pval = res.block$cluster$pval,
+                             mod.small = res.block$mod.small))
   # Note that res.block$pval is the same as minimal.pval for the children of
   # that cluster.
 
   # TODO maybe remove this line
-  stopifnot(length(setdiff(labels(dendr), res.block$colnames.cluster)) == 0)
+  stopifnot(length(setdiff(labels(dendr), res.block$cluster$colnames.cluster)) == 0)
 
   # the significant clusters are stored in this following list
   signif.clusters <- vector("list", 0)
@@ -76,16 +78,17 @@ iterative_testing <- function(x, y, clvar, res.multisplit, dendr, name.block,
                                              minimal.pval = cluster.queue[[1]]$pval,
                                              agg.method = agg.method,
                                              mod.large = mod.large,
+                                             mod.small = cluster.queue[[1]]$mod.small,
                                              stouffer.weights = stouffer.weights),
                              SIMPLIFY = FALSE)
 
       # check which clusters are significant
-      update.signif.clusters <- mapply(FUN = check_significant,
+      update.signif.clusters <- mapply(FUN = check_significant, # TODO
                                        res.child = res.children,
                                        subcluster = subclust,
                                        MoreArgs = list(alpha = alpha),
                                        SIMPLIFY = FALSE)
-      ind.NULL <- vapply(update.signif.clusters,
+      ind.NULL <- vapply(update.signif.clusters, # TODO and below
                          FUN = function(x) {ifelse(is.null(x), TRUE, FALSE)},
                          FUN.VALUE = TRUE)
 
@@ -124,12 +127,13 @@ iterative_testing <- function(x, y, clvar, res.multisplit, dendr, name.block,
 # inside the function \code{iterative_testing}.
 check_significant <- function(res.child, alpha, subcluster) {
   ret <-
-    if(res.child$pval > alpha) {
+    if(res.child$cluster$pval > alpha) {
       NULL
     } else {
       list(dendr = subcluster,
-           colnames.cluster = res.child$colnames.cluster,
-           pval = res.child$pval)
+           colnames.cluster = res.child$cluster$colnames.cluster,
+           pval = res.child$cluster$pval,
+           mod.small = res.child$mod.small)
     }
   return(ret)
 } # {check_significant}
