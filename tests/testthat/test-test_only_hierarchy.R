@@ -463,7 +463,7 @@ test_that("test_only_hierarchy: check output (Example III multiple data sets)", 
   set.seed(744)
   res.multisplit <- multisplit(x = x, y = y, family = "gaussian", B = B)
 
-  # test hierarchy: Stouffer
+  # test hierarchy: Tippett
   res.T <- test_only_hierarchy(x = x, y = y, dendr = dendr,
                                res.multisplit = res.multisplit,
                                family = "gaussian")
@@ -979,6 +979,19 @@ test_that("test_only_hierarchy: check output (Example V multiple data sets)", {
   expect_equal(res.T$res.hierarchy$significant.cluster,
                expected_result$significant.cluster)
 
+  # Tippett with global = FALSE
+  res.T <- test_only_hierarchy(x = x, y = y, clvar = clvar, dendr = dendr,
+                               res.multisplit = res.multisplit,
+                               family = "gaussian", global.test = FALSE)
+
+  expect_identical(res.T$res.hierarchy$block, expected_result$block)
+  expect_equal(res.T$res.hierarchy$p.value[1], expected_result$p.value[1],
+               tol = 1e-90)
+  expect_equal(res.T$res.hierarchy$p.value[2], expected_result$p.value[2],
+               tol = 1e-100)
+  expect_equal(res.T$res.hierarchy$significant.cluster,
+               expected_result$significant.cluster)
+
   # Stouffer
   stouffer_weights <- sqrt(c(800, 200, 350, 50) / sum(c(800, 200, 350, 50)))
 
@@ -1002,6 +1015,20 @@ test_that("test_only_hierarchy: check output (Example V multiple data sets)", {
                tol = 1e-140)
   expect_equal(res.S$res.hierarchy$significant.cluster,
                expected_result$significant.cluster)
+
+  # Stouffer with global = FALSE
+  res.S <- test_only_hierarchy(x = x, y = y, clvar = clvar, dendr = dendr,
+                               res.multisplit = res.multisplit, family = "gaussian",
+                               agg.method = "Stouffer", global.test = FALSE)
+
+  expect_identical(res.S$res.hierarchy$block, expected_result$block)
+  expect_equal(res.S$res.hierarchy$p.value[1], expected_result$p.value[1],
+               tol = 1e-125)
+  expect_equal(res.S$res.hierarchy$p.value[2], expected_result$p.value[2],
+               tol = 1e-140)
+  expect_equal(res.S$res.hierarchy$significant.cluster,
+               expected_result$significant.cluster)
+
 })
 
 #### Perform testing on a tree which is build on less variables ####
@@ -1108,7 +1135,7 @@ test_that("test_only_hierarchy: check output (Example with smaller tree)", {
 
 })
 
-#### Perform testing with three data sets not measuring variables ####
+#### Perform testing with three data sets not measuring all the same variables ####
 test_that("test_only_hierarchy: check return object for multiple data sets not measuring the same variables", {
   B <- 50
   set.seed(938)
@@ -1564,4 +1591,140 @@ test_that("test_only_hierarchy: check return object for three data sets with bin
                tol = 1e-30)
   expect_equal(res.S$res.hierarchy$significant.cluster,
                expected_result$significant.cluster)
+})
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#### Test parallel computations for multicore and sown ####
+test_that("Parallel computations (in test_only_hierarchy): Test parallel computations for multicore and sown", {
+  skip_on_bioc()
+
+  ## simulate index
+  n <- 800
+  p <- 10
+  B <- 50
+
+  ## simulate data
+  r1 <- gen_one(n = n, p = p, seed1 = 9229, ind.a = c(4, 1), seed3 = 8)
+  r2 <- gen_one(n = n, p = p, seed1 = 929, ind.a = c(4, 1), seed3 = 99)
+  r3 <- gen_one(n = n, p = p, seed1 = 99, ind.a = c(4, 1), seed3 = 100)
+  r4 <- gen_one(n = n, p = p, seed1 = 9, ind.a = c(4, 1), seed3 = 1111)
+
+  x <- list(r1$x, r2$x, r3$x, r4$x)
+  y <- list(r1$y, r2$y, r3$y, r4$y)
+  # clvar <- list(r1$clvar, r2$clvar, r3$clvar, r4$clvar)
+
+  # Block
+  block <- data.frame("var.names" = paste0("rsid", 1:10),
+                      "blocks" = c(1, 1, 1, 1, 1, 2, 2, 2, 2, 2),
+                      stringsAsFactors = FALSE)
+
+  ### parallel = "multicore"
+
+  # cluster the data
+  dendr <- cluster_var(x = x, block = block, parallel = "multicore", ncpus = 2)
+  # plot(dendr$res.tree[[1]])
+
+  # multisplit
+  set.seed(744)
+  res.multisplit <- multisplit(x = x, y = y, family = "gaussian", B = B,
+                               parallel = "multicore", ncpus = 2)
+
+  # test hierarchy: Tippett
+  res.T <- test_only_hierarchy(x = x, y = y, dendr = dendr,
+                               res.multisplit = res.multisplit,
+                               family = "gaussian", parallel = "multicore",
+                               ncpus = 2)
+
+
+  ## Test
+  # This list encodes the tree structure
+  cluster_test <- list(c("rsid1", "rsid2", "rsid3", "rsid4", "rsid5"),
+                       c("rsid1", "rsid2", "rsid3"),
+                       c("rsid4", "rsid5"),
+                       c("rsid1", "rsid2"),
+                       "rsid1",
+                       "rsid2",
+                       "rsid3",
+                       "rsid4",
+                       "rsid5")
+
+  res1 <- check_test_hierarchy(x = x[[1]], y = y[[1]], clvar = NULL,
+                               res.multisplit = res.multisplit[1],
+                               B = B, cluster_test = cluster_test)
+
+  res2 <- check_test_hierarchy(x = x[[2]], y = y[[2]], clvar = NULL,
+                               res.multisplit = res.multisplit[2],
+                               B = B, cluster_test = cluster_test)
+
+  res3 <- check_test_hierarchy(x = x[[3]], y = y[[3]], clvar = NULL,
+                               res.multisplit = res.multisplit[3],
+                               B = B, cluster_test = cluster_test)
+
+  res4 <- check_test_hierarchy(x = x[[4]], y = y[[4]], clvar = NULL,
+                               res.multisplit = res.multisplit[4],
+                               B = B, cluster_test = cluster_test)
+
+  pvals_to_be <- rbind(res1, res2, res3, res4)
+
+
+
+  # Tippett
+  compare_with <- apply(X = pvals_to_be, MARGIN = 2,
+                        FUN = function(x, len_y) {
+                          max(1 - (1 - min(x))^(len_y), .Machine$double.neg.eps)
+                        },
+                        len_y = 4)
+
+  expected_result <- data.frame(block = c(1, 1, 2),
+                                p.value = c(compare_with[c("rsid1", "rsid4")], NA))
+  expected_result$significant.cluster <- list(c("rsid1"), c("rsid4"), c(NA))
+  rownames(expected_result) <- NULL
+  attr(expected_result, "class") <- c("data.frame")
+
+  expect_equal(res.T$res.hierarchy$p.value, expected_result$p.value,
+               tol = 1e-40)
+  expect_equal(res.T$res.hierarchy$significant.cluster,
+               expected_result$significant.cluster)
+
+
+  ### parallel = "snow"
+
+  # cluster the data
+  dendr <- cluster_var(x = x, block = block, parallel = "snow", ncpus = 2)
+  # plot(dendr$res.tree[[1]])
+
+  # multisplit
+  set.seed(744)
+  res.multisplit <- multisplit(x = x, y = y, family = "gaussian", B = B,
+                               parallel = "snow", ncpus = 2)
+
+  # test hierarchy: Tippett
+  res.T <- test_only_hierarchy(x = x, y = y, dendr = dendr,
+                               res.multisplit = res.multisplit,
+                               family = "gaussian", parallel = "snow",
+                               ncpus = 2)
+
+  ## Test
+  expect_equal(res.T$res.hierarchy$p.value, expected_result$p.value,
+               tol = 1e-40)
+  expect_equal(res.T$res.hierarchy$significant.cluster,
+               expected_result$significant.cluster)
+
+
 })

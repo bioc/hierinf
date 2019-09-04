@@ -253,9 +253,9 @@ multisplit_one_data <- function(ind, x, y, clvar, B, proportion.select,
     } else if (parallel == "snow") {
       if (is.null(cl)) {
         cl <- parallel::makePSOCKcluster(rep("localhost", ncpus))
-        # export the namespace of hierINF in order for the use the functions
-        # of the package hierINF on the workers
-        parallel::clusterExport(cl, varlist = getNamespaceExports("hierINF"))
+        # export the namespace of hierinf in order for the use the functions
+        # of the package hierinf on the workers
+        parallel::clusterExport(cl, varlist = getNamespaceExports("hierinf"))
         if(RNGkind()[1L] == "L'Ecuyer-CMRG")
           parallel::clusterSetRNGStream(cl)
         res <- parallel::parLapply(cl, seq_len(B), one_split)
