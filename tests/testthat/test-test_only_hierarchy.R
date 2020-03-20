@@ -1263,11 +1263,8 @@ test_that("test_only_hierarchy: check return object for multiple data sets not m
 })
 
 
-
-
-
-
-######## TODO TODO TODO !!!!!!!!!
+#### TODO We would have to apply the hierarchical constraint to the result
+#### calculated by hand in order to receive the exact same results.
 
 #### Perform testing with a data set that contains colinear variables ####
 test_that("test_only_hierarchy: check return object for data set containing colinear variables", {
@@ -1334,6 +1331,10 @@ test_that("test_only_hierarchy: check return object for data set containing coli
   cluster_test <- list(c("Var46", "D2_Var46"),
                        c("Var5", "D2_Var5"),
                        c("Var20", "D2_Var20"))
+                       # # and the single variables
+                       # c("Var46"), c("D2_Var46"),
+                       # c("Var5"), c("D2_Var5"),
+                       # c("Var20"), c("D2_Var20"))
 
   expected_result <- check_test_hierarchy(x = x, y = y, clvar = NULL,
                                           res.multisplit = res.multisplit1[1],
@@ -1344,13 +1345,6 @@ test_that("test_only_hierarchy: check return object for data set containing coli
                cluster_test)
 
 })
-
-
-
-
-
-
-
 
 #### Perform testing with binary response ####
 test_that("test_only_hierarchy: check return object for a data set with binary response", {
