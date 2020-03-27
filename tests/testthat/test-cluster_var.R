@@ -53,7 +53,7 @@ test_that("cluster_var: expect error", {
   colnames(tt) <- c("c1", "c2")
   expect_error(cluster_var(x = tt, d = NULL, method = "average",
                            block = data.frame(c("c1", "c2"), c(1, 1),
-                                              stringsAsFactors = FALSE),
+                                              stringsAsFactors = TRUE),
                            use = "everything"),
                "The first column of block (column names of x) is required to be of type character.",
                fixed = TRUE)
